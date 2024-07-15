@@ -2,6 +2,7 @@ import { $ } from 'bun'
 import { Database } from 'bun:sqlite'
 import { parseArgs } from 'util'
 import filenamify from 'filenamify/browser'
+import {createBackup, fetchTracks} from '../utils.ts'
 
 import type { Track } from '../schema'
 
@@ -32,11 +33,6 @@ async function downloadAudio(url: string, filepath: string, metadataDescription:
 
 /** Downloads all tracks from a radio */
 async function main() {
-  if (!values.slug) {
-    console.error('Pass in `--slug oskar` to download the radio')
-    return
-  }
-
   const db = new Database(`${values.slug}.sqlite`)
   db.exec('PRAGMA journal_mode = WAL;')
   db.run(
@@ -48,7 +44,7 @@ async function main() {
 
   // db.run('delete from tracks;')
 
-  const { data, error } = await createBackupV2(values.slug)
+  const { data, error } = await createBackup(values.slug)
   if (error) return console.error(error)
 
   console.log(data)
@@ -116,6 +112,7 @@ async function main() {
   }
 }
 
+// Get CLI arguments (only strings + booleans)
 const { values, positionals } = parseArgs({
   args: Bun.argv,
   options: {
@@ -140,10 +137,12 @@ const { values, positionals } = parseArgs({
   allowPositionals: true,
 })
 
-console.log('values', values)
-console.log('positionals', positionals)
+console.log('cli values', values)
+console.log('cli positionals', positionals)
 
-// main()
+
 if (!values.slug) throw Error('Pass in `--slug oskar` to download the radio')
-const { data, error } = await fetchTracks(values.slug)
-console.log(data, error)
+// main()
+const { data, error } = await createBackup(values.slug, Number(values.limit))
+if (error) console.log(error)
+console.log(data.radio.name, data.tracks.length)

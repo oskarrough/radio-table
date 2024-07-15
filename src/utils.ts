@@ -6,7 +6,7 @@ import type {Track} from './schema.ts'
 // export let supabase: SupabaseClient<Database>
 
 /** Fetches tracks by channel slug */
-async function fetchTracks(slug: string, limit = 4000) {
+export async function fetchTracks(slug: string, limit = 4000) {
 	if (!slug) return {error: new Error('Missing channel slug')}
 	const {data, error} = await sdk.supabase
 		.from('channel_tracks')
@@ -15,10 +15,11 @@ async function fetchTracks(slug: string, limit = 4000) {
 		.order('created_at', {ascending: false})
 		.limit(limit)
 	if (error) return {error}
-	return data.map((track) => addProviderInfo(track))
+	return {data}
+	// return data.map((track) => addProviderInfo(track))
 }
 
-function addProviderInfo(track: Track) {
+export function addProviderInfo(track: Track) {
 	const {provider, id: providerId} = mediaUrlParser(track.url)
 	track.provider = provider
 	track.providerId = providerId
@@ -26,8 +27,8 @@ function addProviderInfo(track: Track) {
 }
 
 /** Fetches the channel and tracks and handles errors */
-export async function createBackup(slug: string) {
-	const promises = [sdk.channels.readChannel(slug), fetchTracks(slug)]
+export async function createBackup(slug: string, limit?: number) {
+	const promises = [sdk.channels.readChannel(slug), fetchTracks(slug, limit)]
 	try {
 		const [radio, tracks] = await Promise.all(promises)
 		return {
