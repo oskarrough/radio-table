@@ -32,7 +32,7 @@ export async function createBackup(slug: string, limit?: number) {
 	const promises = [sdk.channels.readChannel(slug), fetchTracks(slug, limit)]
 	try {
 		const [radio, tracks] = await Promise.all(promises)
-		if (radio.error) throw new Error(radio.error.message)
+		if (radio.error) throw new Error('Failed to fetch radio. Was it migrated to Radio4000 v2?')
 		if (tracks.error) throw new Error(tracks.error.message)
 		return {
 			data: {
