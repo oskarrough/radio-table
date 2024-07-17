@@ -1,10 +1,10 @@
-import {$, Glob} from 'bun'
+import {$, Glob, ShellError} from 'bun'
 import {Database} from 'bun:sqlite'
 import {parseArgs} from 'util'
 import filenamify from 'filenamify/browser'
 import {createBackup} from '../utils.ts'
 import type {Track} from '../schema'
-import {mkdir, unlink} from 'node:fs/promises'
+import {mkdir} from 'node:fs/promises'
 
 // Run with  bun src/cli/r4.ts --slug oskar --limit 3 --folder src/cli/oskar
 
@@ -48,7 +48,7 @@ async function main(slug: string, limit: number, folder: string) {
 	const db = await setupDatabase(`${folder}/${slug}.sqlite`)
 
 	const {data, error} = await createBackup(slug, limit)
-	if (error) throw error
+	if (error || !data) throw error
 
 	await Bun.write(`${folder}/${slug}.json`, JSON.stringify(data, null, 2))
 
@@ -66,32 +66,30 @@ async function main(slug: string, limit: number, folder: string) {
 	const filteredTracks = values.includeFailed ? tracks : tracks.filter((t) => !t.lastError)
 	const localTracks = db.query(`select count(id) from tracks`)
 	const localErrors = db.query('select count(id) from tracks where last_error is not null')
-	const localDuplicates = db.query('select count(id) from tracks where json_array_length(files) > 1')
+	// const localDuplicates = db.query('select count(id) from tracks where json_array_length(files) > 1')
 	console.log(`Downloading ${data.radio.name} to ${values.folder}/${values.slug}`, {
 		localTracks: localTracks.values()[0][0],
 		localErrors: localErrors.values()[0][0],
-		localDuplicates: localDuplicates.values()[0][0],
+		// localDuplicates: localDuplicates.values()[0][0],
 		remoteTracksInQuery: tracks.length,
 		// missingTracks: tracks.length - Number(localTracks.values()[0][0]),
 	})
 
-	if (values.deleteDuplicates) {
-		const items = db.query('select id, files from tracks where json_array_length(files) > 1').all()
-		for await (const item of items) {
-			// console.log(item.files)
-			for await (const path of JSON.parse(item.files)) {
-				console.log('del', path)
-				try {
-					await unlink('./' + path)
-				} catch (err) {
-					console.log('failed to delete duplicate', err)
-				} finally {
-					db.query('delete from tracks where id = $id').run({id: item.id})
-				}
-			}
-		}
-		return
-	}
+	// if (values.deleteDuplicates) {
+	// 	const tracks = db.query('select id, file from tracks where json_array_length(files) > 1').all()
+	// 	for (const item of tracks) {
+	// 		try {
+	// 			console.log('Deleting', item)
+	// 			await unlink('./' + item.file)
+	// 		} catch (err) {
+	// 			console.error('Failed to delete duplicate:', item.file, err)
+	// 		} finally {
+	// 			db.query('delete from tracks where id = $id').run({id: item.id})
+	// 		}
+	// 	}
+	// 	console.log(`Deleted ${items.length} duplicate tracks`)
+	// 	return
+	// }
 
 	if (values.debug) {
 		console.log('exiting because debug', 'Would have processed', filteredTracks.length, 'tracks')
@@ -108,8 +106,8 @@ async function main(slug: string, limit: number, folder: string) {
 
 	const tracksFolder = `${folder}/tracks/`
 	const glob = new Glob(`${tracksFolder}/*.m4a`)
-	let current = 0
 
+	let current = 0
 	for await (const t of filteredTracks) {
 		current++
 		const indexLog = `${current}/${filteredTracks.length}`
@@ -125,60 +123,43 @@ async function main(slug: string, limit: number, folder: string) {
 		// Compare remote tracks with local files. Why actually? Can't we just check the sqlite? Or is the filesystem the real database :smirk:
 		const filesWithSameProviderId = []
 		for await (const file of glob.scan('.')) {
-			if (file.includes(t.providerId)) {
+			if (t.providerId && file.includes(t.providerId)) {
 				filesWithSameProviderId.push(file)
 			}
 		}
-		db.query(`UPDATE tracks SET files = $files WHERE id = $id;`).run({
+		db.query(`UPDATE tracks SET files = $files, downloaded = $downloaded WHERE id = $id;`).run({
 			id: t.id,
 			files: JSON.stringify(filesWithSameProviderId),
+			downloaded: filesWithSameProviderId.length > 0 ? 1 : 0,
 		})
-		t.files = filesWithSameProviderId
-		const cleanTitle = filenamify(t.title, {replacement: ' ', maxLength: 255})
-		const filename = `${tracksFolder}/${cleanTitle} [${t.providerId}]`
-		if (cleanTitle !== t.title) {
-			// console.log('Changed title', t.title, '=>', cleanTitle)
-		}
-		const fileExists = await Bun.file(`${filename}.m4a`).exists()
-
-		if (fileExists && !filesWithSameProviderId.length) {
-			console.log('weeeird')
-			return
-		}
-
-		if (filesWithSameProviderId.length > 1) {
-			// has duplicates
-		} else if (filesWithSameProviderId.length === 1) {
-			// already downloaded
-			// console.log(indexLog, 'Skipping track because it is already downloaded', t.title)
-			// throw new Error(`Duplicates found for track id: ${t.id}`)
-		}
-		if (!values.force && (filesWithSameProviderId.length || fileExists)) {
-			// console.log(indexLog, 'skipped - exists and force is deactivated', t.title)
-			continue
-		}
+		const fileExists = filesWithSameProviderId.length > 0
+		if (!values.force && fileExists) continue
 
 		try {
-			try {
-				await downloadAudio(t.url, `${filename}.%(ext)s`, t.description || t.url)
-				// Mark as downloaded.
-				console.log(indexLog, 'Downloaded', t.title)
-				db.query(`UPDATE tracks SET downloaded = 1, last_error = $lastError WHERE id = $id;`).run({
-					id: t.id,
-					lastError: null,
-				})
-			} catch (err) {
-				throw Error(`Failed to download audio: ${err.stderr.toString()}`)
-			}
-		} catch (err) {
-			// Mark as failed.
-			console.log(indexLog, err.message)
-			db.query(`UPDATE tracks SET downloaded = 0, last_error = $error WHERE id = $id;`).run({
+			const cleanTitle = filenamify(t.title, {replacement: ' ', maxLength: 255})
+			const filename = `${tracksFolder}/${cleanTitle} [${t.providerId}]`
+			await downloadAudio(t.url, `${filename}.%(ext)s`, t.description || t.url)
+			// Mark as downloaded.
+			console.log(indexLog, 'Downloaded', t.title)
+			db.query(`UPDATE tracks SET downloaded = 1, last_error = $lastError, files = $files WHERE id = $id;`).run({
 				id: t.id,
-				error: err.message,
+				lastError: null,
+				files: `${filename}.m4a`,
+			})
+		} catch (err: unknown) {
+			const error = err as ShellError
+			// Mark as failed.
+			const msg = `Failed to download audio: ${error.stderr.toString()}`
+			console.log(indexLog, msg)
+			db.query(`UPDATE tracks SET downloaded = 0, last_error = $lastError WHERE id = $id;`).run({
+				id: t.id,
+				files: null,
+				lastError: msg,
 			})
 		}
 	}
+	console.log('Success')
+	process.exit(0)
 }
 
 /** Downloads the audio from a URL (supported by yt-dlp) */
