@@ -24,4 +24,4 @@ dist-ssr
 *.sw?
 
 # Downloaded radios
-src/cli/oskar/
+downloads/

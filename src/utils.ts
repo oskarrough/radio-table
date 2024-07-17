@@ -15,8 +15,9 @@ export async function fetchTracks(slug: string, limit = 4000) {
 		.order('created_at', {ascending: false})
 		.limit(limit)
 	if (error) return {error}
-	return {data}
-	// return data.map((track) => addProviderInfo(track))
+	return {
+		data: data.map((track) => addProviderInfo(track)),
+	}
 }
 
 export function addProviderInfo(track: Track) {
