@@ -15,6 +15,7 @@ export interface Track {
 	downloaded?: number
 	files?: string
 	lastError?: string
+	// computed from mediaUrlParser
 	provider?: string
 	providerId?: string
 }
