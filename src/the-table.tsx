@@ -13,7 +13,6 @@ import {
 } from '@tanstack/react-table'
 import { RankingInfo, rankItem, compareItems } from '@tanstack/match-sorter-utils'
 import type { Track } from './schema'
-import './App.css'
 
 declare module '@tanstack/react-table' {
 	//add fuzzy filter to the filterFns
