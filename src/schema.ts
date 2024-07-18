@@ -1,4 +1,5 @@
-export interface Track {
+
+export interface TrackR4 {
 	// from supabase schema
 	id: string
 	created_at: string
@@ -7,15 +8,18 @@ export interface Track {
 	url: string
 	discogs_url?: string
 	description?: string
-	tags: string[]
-	mentions: string[]
+	tags?: string[]
+	mentions?: string[]
 	// from channel_tracks view
 	slug: string
+}
+
+export type Track = Omit<TrackR4, 'tags' | 'mentions'> & {
+	tags?: string
+	mentions?: string
 	// custom ones
-	downloaded?: number
 	files?: string
 	lastError?: string
-	// computed from mediaUrlParser
 	provider?: string
 	providerId?: string
 }
@@ -37,3 +41,21 @@ export interface Channel {
 	updated_at: string | null
 	url: string | null
 }
+
+export const TrackTableSchema = `
+	CREATE TABLE IF NOT EXISTS tracks  (
+		id TEXT PRIMARY KEY,
+		slug TEXT,
+		title TEXT,
+		description TEXT,
+		url TEXT,
+		discogs_url TEXT,
+		provider TEXT,
+		provider_id TEXT,
+		created_at TEXT,
+		updated_at TEXT,
+		tags TEXT,
+		mentions TEXT,
+		last_error TEXT,
+		files TEXT
+	);`

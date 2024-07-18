@@ -1,8 +1,7 @@
 import {sdk} from '@radio4000/sdk'
 import mediaUrlParser from 'media-url-parser'
+import type {Channel, TrackR4, Track} from './schema.ts'
 // import {pipe, map} from 'remeda'
-import type {Channel, Track} from './schema.ts'
-// export let supabase: SupabaseClient<Database>
 
 /** Fetches tracks by channel slug */
 export async function fetchTracks(slug: string, limit = 4000) {
@@ -13,16 +12,27 @@ export async function fetchTracks(slug: string, limit = 4000) {
 		.eq('slug', slug)
 		.order('created_at', {ascending: false})
 		.limit(limit)
+		.returns<TrackR4[]>()
 	if (error) return {error}
-	// @ts-expect-error couldn't find a way to type this
-	const tracks = data.map((item) => addProviderInfo(item))
+	const tracks = data.map(addProviderInfo).map(serializeTrack)
 	return {data: tracks}
 }
 
-export function addProviderInfo(track: Track) {
+/** Parses the track's URL and adds provider + provider id */
+export function addProviderInfo(track: TrackR4) {
 	const {provider, id: providerId} = mediaUrlParser(track.url)
-	track.provider = provider
-	track.providerId = providerId
+	return {
+		...track,
+		provider,
+		providerId,
+	}
+}
+
+export function serializeTrack(t: TrackR4) {
+	const track = {...t} as Track
+	// R4 returns an array of tags/mentions, but sqlite doesn't support that.
+	if (t.tags) track.tags = t.tags.join(',')
+	if (t.mentions) track.mentions = t.mentions.join(',')
 	return track
 }
 
