@@ -1,3 +1,4 @@
+import { upsertLocalTrack } from "./utils"
 
 async function pull(slug: string) {
 	const {data, error} = await createBackup(slug)
@@ -31,12 +32,11 @@ async function pull(slug: string) {
 	// data.tracks.map(serialize).forEach(upsertLocalTrack)
 	// 4. Re-use local data, if we already processed some of the remote tracks.
 	// const tracks = data.tracks.map((t) => {
-	// 	const q = db.query('select files, last_error as lastError from tracks where id = $id;')
+	// 	const q = db.query('select files, lastError as lastError from tracks where id = $id;')
 	// 	const row = q.get({id: t.id}) as Track
 	// 	return {...t, files: row?.files, lastError: row?.lastError}
 	// }) as Track[]
 }
-
 
 // now we could sync remote to local db?
 // const tracksToPull = normalTracks.filter((t) => !localTracks.find((lt) => lt.id === t.id))
@@ -58,13 +58,7 @@ async function pull(slug: string) {
 // 	}
 // })
 
-// logStatus()
-// await pull(slug)
-// logStatus()
-// process.exit(1)
-
-async function helloworld() {
-	// if (values.deleteDuplicates) {
+// if (values.deleteDuplicates) {
 	// 	const tracks = db.query('select id, file from tracks where json_array_length(files) > 1').all()
 	// 	for (const item of tracks) {
 	// 		try {
@@ -80,6 +74,7 @@ async function helloworld() {
 	// 	return
 	// }
 
+async function helloworld() {
 	const tracksWithError = localTracks.filter((t) => t.lastError)
 	const filteredTracks = values.includeFailed ? localTracks : localTracks.filter((t) => !t.lastError)
 
@@ -112,51 +107,12 @@ async function helloworld() {
 			}
 		}
 		t.files = JSON.stringify(filesWithSameProviderId)
-		db.query(
-			`INSERT OR REPLACE INTO tracks (id, slug, created_at, updated_at, title, url, discogs_url, description, tags, mentions, provider, provider_id, files, last_error) VALUES ($id, $slug, $created_at, $updated_at, $title, $url, $discogs_url, $description, $tags, $mentions, $provider, $providerId, $files, $lastError);`,
-		).run({
-			...t,
-		})
+		upsertLocalTrack(db, t)
 
 		const fileExists = filesWithSameProviderId.length > 0
 		if (!values.force && fileExists) continue
-
-		try {
-			const cleanTitle = filenamify(t.title, {replacement: ' ', maxLength: 255})
-			const filename = `${tracksFolder}/${cleanTitle} [${t.providerId}]`
-			await downloadAudio(t.url, `${filename}.%(ext)s`, t.description || t.url)
-			console.log(indexLog, 'Downloaded', t.title)
-			db.query(`UPDATE tracks SET last_error = $lastError, files = $files WHERE id = $id;`).run({
-				id: t.id,
-				files: `${filename}.m4a`,
-				lastError: null,
-			})
-		} catch (err: unknown) {
-			const error = err as ShellError
-			const msg = `Error downloading audio: ${error.stderr.toString()}`
-			console.log(indexLog, msg)
-			db.query(`UPDATE tracks SET files = $files, last_error = $lastError WHERE id = $id;`).run({
-				id: t.id,
-				files: null,
-				lastError: msg,
-			})
-		}
 	}
 }
 
-function logStatus() {
-	console.log('local tracks', localTracks.length)
-	// console.log('remote tracks', remoteTracks.length)
-	// if (!data) return
-	// const remoteTracks = data.tracks
-	// console.log('remote tracks', remoteTracks.length)
-	// console.log(remoteTracks.length - localTracks.length, 'tracks to pull')
-	// const localDuplicates = db.query('select count(id) from tracks where json_array_length(files) > 1')
-	// console.log(`Downloading ${data.radio.name} to ${values.folder}/${values.slug}`, {
-	// 	localTracks: db.query(`select count() from tracks`).values()[0][0],
-	// 	localErrors: db.query('select count() from tracks where last_error is not null').values()[0][0],
-	// 	// localDuplicates: localDuplicates.values()[0][0],
-	// 	remoteTracksQueried: tracks.length,
-	// 	// missingTracks: tracks.length - Number(localTracks.values()[0][0]),
-	// })
-}
+// const localDuplicates = db.query('select count(id) from tracks where json_array_length(files) > 1')
+// const localErrors = db.query('select count() from tracks where lastError is not null')

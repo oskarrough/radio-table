@@ -1,4 +1,4 @@
-import {$} from 'bun'
+import {$, ShellError} from 'bun'
 import {Database} from 'bun:sqlite'
 import {sdk} from '@radio4000/sdk'
 import mediaUrlParser from 'media-url-parser'
@@ -10,6 +10,7 @@ import {
 	type RemoteTrack,
 	type Track,
 } from './schema.ts'
+import filenamify from 'filenamify'
 
 /** Fetches tracks by channel slug */
 export async function fetchRemoteTracks(slug: string, limit = 4000) {
@@ -114,6 +115,32 @@ export async function createBackup(slug: string, limit?: number) {
 /** Downloads the audio from a URL (supported by yt-dlp) */
 export async function downloadAudio(url: string, filepath: string, metadataDescription: string) {
 	return $`yt-dlp -f 'bestaudio[ext=m4a]' --no-playlist --restrict-filenames --output ${filepath} --parse-metadata "${metadataDescription}:%(meta_comment)s" --embed-metadata --quiet --progress ${url}`
+}
+
+export function toFilename(track: LocalTrack | Track, filepath: string) {
+	const cleanTitle = filenamify(track.title, {replacement: ' ', maxLength: 255})
+	return `${filepath}/${cleanTitle} [${track.providerId}].m4a`
+}
+
+export async function downloadTrack(t: LocalTrack | Track, filename: string, db: Database) {
+	try {
+		console.log('Attempting download', t)
+		await downloadAudio(t.url, `${filename}`, t.description || '')
+		db.query(`UPDATE tracks SET files = $files, lastError = $lastError WHERE id = $id;`).run({
+			id: t.id,
+			files: `${filename}`,
+			lastError: null,
+		})
+	} catch (err: unknown) {
+		const error = err as ShellError
+		t.lastError = `Error downloading track: ${error.stderr.toString()}`
+		console.log(t.lastError)
+		db.query(`UPDATE tracks SET files = $files, lastError = $lastError WHERE id = $id;`).run({
+			id: t.id,
+			files: null,
+			lastError: t.lastError,
+		})
+	}
 }
 
 /** Set up (or reuse) a local sqlite database */
