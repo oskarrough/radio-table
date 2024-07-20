@@ -1,61 +1,73 @@
+import {z} from 'zod'
 
-export interface TrackR4 {
-	// from supabase schema
-	id: string
-	created_at: string
-	updated_at: string
-	title: string
-	url: string
-	discogs_url?: string
-	description?: string
-	tags?: string[]
-	mentions?: string[]
-	// from channel_tracks view
-	slug: string
-}
+/**
+	These schemas exist for runtime (and type) validations. Unfortunately we have three different tracks.
+	Why are they different, you might ask. Good question. One reason is that SQLite and PostgreSQL aren't compatible, sqlite has no string[] column, for example.
 
-export type Track = Omit<TrackR4, 'tags' | 'mentions'> & {
-	tags?: string
-	mentions?: string
-	// custom ones
-	files?: string
-	lastError?: string
-	provider?: string
-	providerId?: string
-}
+	Another reason is that it's good exercise to handle different schemas. I'd also want to sync to Matrix, not just Radio4000 v2.
 
-export interface Channel {
-	coordinates: unknown | null
-	created_at: string | null
-	description: string | null
-	favorites: string[] | null
-	firebase_id: string | null
-	followers: string[] | null
-	fts: unknown | null
-	id: string
-	image: string | null
-	latitude: number | null
-	longitude: number | null
-	name: string
-	slug: string
-	updated_at: string | null
-	url: string | null
-}
+	Track = for use in the app
+	LocalTrack = for storing in the local SQLite database
+	RemoteTrack = for fetching from the remote Radio4000 v2 API
+*/
+
+const BaseTrackSchema = z.object({
+	id: z.string(),
+	createdAt: z.string().datetime({offset: true}),
+	updatedAt: z.string().datetime({offset: true}).optional(),
+	slug: z.string(),
+	url: z.string().url(),
+	title: z.string(),
+	description: z.string().nullable(),
+	discogsUrl: z.string().url().optional().or(z.string().nullish()),
+	files: z.string().optional().nullable(),
+	lastError: z.string().optional().nullable(),
+	provider: z.string().optional().nullable(),
+	providerId: z.string().optional().nullable(),
+})
+
+export const TrackSchema = BaseTrackSchema.extend({
+	tags: z.array(z.string()).optional(),
+	mentions: z.array(z.string()).optional(),
+})
+export type Track = z.infer<typeof TrackSchema>
+
+export const LocalTrackSchema = TrackSchema.extend({
+	tags: z.string().optional(),
+	mentions: z.string().optional(),
+})
+export type LocalTrack = z.infer<typeof LocalTrackSchema>
+
+export const RemoteTrackSchema = z.object({
+	...TrackSchema.omit({
+		createdAt: true,
+		updatedAt: true,
+		discogsUrl: true,
+		provider: true,
+		providerId: true,
+		files: true,
+		lastError: true,
+	}).shape,
+	created_at: z.string(),
+	updated_at: z.string().optional(),
+	discogs_url: z.string().url().optional(),
+})
+export type RemoteTrack = z.infer<typeof RemoteTrackSchema>
 
 export const TrackTableSchema = `
 	CREATE TABLE IF NOT EXISTS tracks  (
 		id TEXT PRIMARY KEY,
+		createdAt TEXT,
+		updatedAt TEXT,
 		slug TEXT,
+		url TEXT,
 		title TEXT,
 		description TEXT,
-		url TEXT,
-		discogs_url TEXT,
-		provider TEXT,
-		provider_id TEXT,
-		created_at TEXT,
-		updated_at TEXT,
 		tags TEXT,
 		mentions TEXT,
-		last_error TEXT,
-		files TEXT
+		discogsUrl TEXT,
+		files TEXT,
+		lastError TEXT,
+		provider TEXT,
+		providerId TEXT
 	);`
