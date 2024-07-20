@@ -5,10 +5,14 @@ import {parseArgs} from 'util'
 import {
 	localTrackToTrack,
 	setupDatabase,
+	fetchRemoteTracks,
 	downloadTrack,
 	toFilename,
+	remoteTrackToTrack,
+	upsertLocalTrack,
+	trackToLocalTrack,
 } from '../utils.ts'
-import {LocalTrack} from '../schema'
+import type {LocalTrack, Track} from '../schema'
 
 /**
   We work with the tracks across three different layers:
@@ -31,10 +35,8 @@ const {values} = parseArgs({
 		folder: {
 			type: 'string',
 		},
-		includeFailed: {
-			type: 'boolean',
-		},
-		force: {
+
+		retryFailed: {
 			type: 'boolean',
 		},
 		debug: {
@@ -44,6 +46,9 @@ const {values} = parseArgs({
 			type: 'boolean',
 		},
 		pull: {
+			type: 'boolean',
+		},
+		download: {
 			type: 'boolean',
 		},
 	},
@@ -56,103 +61,99 @@ const slug = values.slug
 const limit = Number(values.limit)
 const folder = `${values.folder}/${values.slug}`
 const databasePath = `${folder}/${slug}.sqlite`
+const tracksFolder = `${folder}/tracks`
 
 console.log('START:', slug, limit, databasePath)
 console.time('STOP')
-
-await mkdir(folder, {recursive: true})
+await mkdir(tracksFolder, {recursive: true})
 const db = await setupDatabase(databasePath)
 
-const localTracks = db
-	.query(`select * from tracks`)
-	.all()
-	.map(localTrackToTrack)
-	.filter((x) => x)
-console.log(localTracks.length, 'local tracks')
+function getTracks(): Track[] {
+	const query = db.query(`select * from tracks`)
+	const localTracks = query.all() as LocalTrack[]
+	const tracks = localTracks
+		.map(localTrackToTrack)
+		.filter((x) => x !== null)
+		.filter((x) => x)
+	return tracks
+}
 
-// // Fetch remote tracks into tracks.
-// const { data, error } = await fetchRemoteTracks(slug, limit)
-// if (error) throw Error(`Failed to fetch remote tracks: ${error.message}`)
-// const remoteTracks = data.map(remoteTrackToTrack).filter((x) => x)
-// console.log('Fetched', remoteTracks.length, 'remote tracks')
-// if (data.length - remoteTracks.length > 0) {
-//   console.log(data.length - remoteTracks.length, 'track(s) failed to parse')
-// }
+const glob = new Glob(`${tracksFolder}/*.m4a`)
+const localFiles = await Array.fromAsync(glob.scan('.'))
 
-// // Check if there are remote tracks to pull.
-// const localIds = new Set(localTracks.map((t) => t.id))
-// const newRemoteTracks = remoteTracks.filter((track) => !localIds.has(track.id))
-// if (newRemoteTracks.length) {
-//   console.log(newRemoteTracks.length, 'new remote tracks to pull. Run --pull to do it')
-//   if (values.pull) {
-//     newRemoteTracks.forEach((t) => upsertLocalTrack(db, t))
-//     console.log('Done pulling')
-//   }
-// } else {
-//   console.log('Nothing to pull')
-// }
+const tracks = getTracks()
+console.log(tracks.length, 'local tracks')
+console.log(tracks.filter((t) => t.files).length, 'tracks with file')
+console.log(localFiles.length, 'local files')
+console.log(tracks.filter((t) => t.lastError).length, 'tracks with error')
+console.log(tracks.filter((t) => !t.files).length, 'tracks without file')
+console.log(tracks.filter((t) => !t.files && !t.lastError).length, 'tracks without file and error')
+
+// Fetch remote tracks
+const {data, error} = await fetchRemoteTracks(slug, limit)
+if (error) throw Error(`Failed to fetch remote tracks: ${error.message}`)
+const remoteTracks = data.map(remoteTrackToTrack).filter((x) => x)
+console.log('Fetched', remoteTracks.length, 'remote tracks')
+if (data.length - remoteTracks.length > 0) {
+	console.log(data.length - remoteTracks.length, 'track(s) failed to parse')
+}
+
+// Check if there are remote tracks to pull.
+const localIds = new Set(tracks.map((t) => t.id))
+const newRemoteTracks = remoteTracks.filter((track) => !localIds.has(track.id))
+if (newRemoteTracks.length) {
+	console.log(newRemoteTracks.length, 'remote tracks to pull. Run --pull')
+	if (values.pull) {
+		newRemoteTracks.forEach((t) => upsertLocalTrack(db, t))
+		console.log('Done pulling')
+	}
+} else {
+	console.log('Nothing to pull')
+}
+
+const list = getTracks()
+	.slice(0, limit)
+	.filter((track) => {
+		const filename = toFilename(track, tracksFolder)
+		const exists = existsSync(filename)
+		if (exists && !track.files) {
+			console.log('Found existing track', track.id)
+			db.query('update tracks set files = ? where id = ?').run(filename, track.id)
+		}
+		return !exists
+	})
+	.filter((track) => (values.retryFailed ? true : !track.lastError))
+
+if (list.length && values.download) {
+	console.log('Downloading', list.length, 'tracks. It will take around', list.length * 4, 'seconds. See ya')
+	let current = 0
+	for (const track of list) {
+		current++
+		const progress = `${current}/${list.length}`
+		const filename = toFilename(track, tracksFolder)
+		console.log(progress, track.lastError, filename)
+		await downloadTrack(track, filename, db)
+	}
+	console.log(
+		getTracks()
+			.slice(0, limit)
+			.filter((x) => x.lastError).length,
+		'tracks failed to download. Use --retryFailed to try again',
+	)
+} else {
+	if (!values.download) {
+		console.log('Use --download to download your tracks')
+	}
+}
 
 // // Check if there are local tracks to push.
 // const remoteIds = new Set(remoteTracks.map((t) => t.id))
-// const newLocalTracks = localTracks.filter((track) => !remoteIds.has(track.id))
+// const newLocalTracks = getTracks().filter((track) => !remoteIds.has(track.id))
 // if (newLocalTracks.length) {
 //   console.log(newLocalTracks.length, 'tracks to push')
 // } else {
 //   console.log('Nothing to push')
 // }
-
-// Things we could do now.
-// - Check remote tracks that could not be pulled
-// - Check local tracks without files
-// - Check local tracks with lastError
-
-const tracksFolder = `${folder}/tracks`
-const glob = new Glob(`${tracksFolder}/*.m4a`)
-const filesDownloaded = await Array.fromAsync(glob.scan('.'))
-console.log(filesDownloaded.length, 'files on disk')
-
-const whatnow = db.query(`select id, title, files, lastError from tracks where files != ''`).all()
-console.log(whatnow.length, 'tracks with files')
-
-const errors = db.query(`select id, title, files, lastError from tracks where lastError != ''`).all()
-console.log(errors.length, 'tracks with errors')
-
-const tracksWithEmptyFiles = db.query(`select * from tracks where files = '' and lastError = ''`).all() as LocalTrack[]
-console.log(tracksWithEmptyFiles.length, `tracks  to download (e.g. tracks without files and error)`)
-
-// tracksWithEmptyFiles.forEach((track) => downloadTrack(track, tracksFolder, db))
-for (const track of tracksWithEmptyFiles) {
-	await downloadTrack(track, tracksFolder, db)
-}
-
-const q123 = db.query(`select * from tracks where lastError is null`).all() as LocalTrack[]
-console.log(q123.length, 'tracks without errors')
-
-// Compare remote tracks with local files. Why actually? Can't we just check the sqlite? Or is the filesystem the real database :smirk:
-// const filesWithSameProviderId = []
-// for await (const file of glob.scan('.')) {
-// 	if (t.providerId && file.includes(t.providerId)) {
-// 		filesWithSameProviderId.push(file)
-// 	}
-// }
-// t.files = JSON.stringify(filesWithSameProviderId)
-// upsertLocalTrack(db, t)
-
-// const fileExists = filesWithSameProviderId.length > 0
-// if (!values.force && fileExists) continue
-
-const q = db.query('update tracks set files = $files where id = $id')
-for (const track of q123) {
-	const filename = track.files || toFilename(track, tracksFolder)
-	const exists = existsSync(filename)
-	if (exists) {
-		// console.log('skipping existing track')
-		continue
-	}
-	console.log('doesnt exist', filename)
-	// console.log(filesDownloaded.filter(x => x.includes(track.providerId)))
-	// await downloadTrack(track, filename, db)
-}
 
 console.timeEnd('STOP')
 // process.exit(0)

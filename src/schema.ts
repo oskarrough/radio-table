@@ -19,7 +19,7 @@ const BaseTrackSchema = z.object({
 	url: z.string().url(),
 	title: z.string(),
 	description: z.string().nullable(),
-	discogsUrl: z.string().url().optional().or(z.string().nullish()),
+	discogsUrl: z.string().url().optional().or(z.string().nullable()),
 	files: z.string().optional().nullable(),
 	lastError: z.string().optional().nullable(),
 	provider: z.string().optional().nullable(),

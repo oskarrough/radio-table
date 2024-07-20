@@ -80,7 +80,7 @@ export function trackToLocalTrack(t: Track): LocalTrack {
 	}
 }
 
-export function localTrackToTrack(t: LocalTrack): Track | null {
+export function localTrackToTrack(t: LocalTrack) {
 	try {
 		return TrackSchema.parse({
 			...t,
@@ -122,9 +122,9 @@ export function toFilename(track: LocalTrack | Track, filepath: string) {
 	return `${filepath}/${cleanTitle} [${track.providerId}].m4a`
 }
 
+/** Downloads the URL of a track to disk, and updates the track in the local database. */
 export async function downloadTrack(t: LocalTrack | Track, filename: string, db: Database) {
 	try {
-		console.log('Attempting download', t)
 		await downloadAudio(t.url, `${filename}`, t.description || '')
 		db.query(`UPDATE tracks SET files = $files, lastError = $lastError WHERE id = $id;`).run({
 			id: t.id,
@@ -134,7 +134,7 @@ export async function downloadTrack(t: LocalTrack | Track, filename: string, db:
 	} catch (err: unknown) {
 		const error = err as ShellError
 		t.lastError = `Error downloading track: ${error.stderr.toString()}`
-		console.log(t.lastError)
+		console.error(t.lastError)
 		db.query(`UPDATE tracks SET files = $files, lastError = $lastError WHERE id = $id;`).run({
 			id: t.id,
 			files: null,
@@ -164,29 +164,12 @@ export async function upsertLocalTrack(db: Database, t: Track) {
 	// existing fields would be overwritten, so we keep them here.
 	const existing = db.query(`SELECT * FROM tracks WHERE id = $id;`).get({id: track.id}) as LocalTrack
 	if (existing) {
-		track.files = existing.files
-		track.lastError = existing.lastError
+		track.files = t.files || existing.files
+		track.lastError = t.lastError || existing.lastError
 	} else {
 		track.files = t.files || null
 		track.lastError = t.lastError || null
 	}
-	console.log('upserted local track', track.title)
+	console.log('Upserted local track', track.title, track.files)
 	upsertTrackQuery(db).run(track)
 }
-
-// function diffObjects(local: Record<string, any>, remote: Record<string, any>) {
-// 	const allKeys = R.unique([...Object.keys(local), ...Object.keys(remote)])
-// 	return R.pipe(
-// 		allKeys,
-// 		R.map((key) => ({
-// 			key,
-// 			localValue: local[key],
-// 			remoteValue: remote[key],
-// 			status: local[key] === remote[key] ? 'same' : 'different',
-// 		})),
-// 		R.filter(
-// 			({status, localValue, remoteValue}) =>
-// 				status === 'different' || localValue === undefined || remoteValue === undefined,
-// 		),
-// 	)
-// }
