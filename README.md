@@ -1,11 +1,31 @@
-playing around
+Playing around. There are two things here:
 
-## Things to fix
+1. A CLI program to manage a radaio
+2. A React very configurable <table> component for rendering a table of tracks
 
-- I've temporarily hardcoded downloaded files to be in .m4a format, but this doesn't work some files. Let's let yt-dlp decide the format and updates track.files accordingly.
+## The CLI
 
-## We can compile the CLI into a standalone binary like so:
+Note, this only works with `bun` for now. Sorry.
 
 ```
-bun build --compile --minify --sourcemap ./src/cli.ts --outfile myapp
+Usage: bun src/cli.ts [...args]
+
+Options:
+	--slug      Slug of the radio to use
+	--folder    Folder to download the tracks to
+	--limit     Number of tracks to process
+	--pull      Pull tracks from Radio4000
+	--download  Download music files from tracks
 ```
+
+
+I've temporarily hardcoded downloaded files to be in .m4a format, but this doesn't work some files. Let's let yt-dlp decide the format and updates track.files accordingly.
+
+We can compile the CLI into a standalone binary like so:
+
+```
+bun build --compile --minify --sourcemap ./src/cli.ts --outfile r4
+./r4 --slug oskar --folder ~/Music --limit 10 --pull --download
+```
+
+## The table component

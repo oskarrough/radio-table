@@ -27,7 +27,7 @@ const {values} = parseArgs({
 		folder: {
 			type: 'string',
 		},
-		retryFailed: {
+		downloadFailed: {
 			type: 'boolean',
 		},
 		pull: {
@@ -115,7 +115,7 @@ if (values.download) {
 			}
 			return !exists
 		})
-		.filter((track) => (values.retryFailed ? true : !track.lastError))
+		.filter((track) => (values.downloadFailed ? true : !track.lastError))
 	if (list.length) {
 		console.log('Downloading', list.length, 'tracks. It will take around', list.length * 4, 'seconds. See ya')
 
@@ -142,7 +142,7 @@ if (values.download) {
 			getTracks(db)
 				.slice(0, limit)
 				.filter((x) => x.lastError).length,
-			'tracks failed to download. Use --retryFailed to try again',
+			'tracks failed to download. Use --downloadFailed to try again',
 		)
 	} else {
 		// console.log('all downloaded')
@@ -152,9 +152,9 @@ if (values.download) {
 	console.log('--download', toDownload.length, 'missing files')
 }
 
-if (values.download && !values.retryFailed) {
+if (values.download && !values.downloadFailed) {
 	const q2 = getTracks(db).filter((t) => t.lastError)
-	console.log('--download --retryFailed to include', q2.length, 'files that previously failed')
+	console.log('--download --downloadFailed to include', q2.length, 'files that previously failed')
 }
 
 /*
