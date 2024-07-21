@@ -9,6 +9,7 @@ import {z} from 'zod'
 	Track = for use in the app
 	LocalTrack = for storing in the local SQLite database
 	RemoteTrack = for fetching from the remote Radio4000 v2 API
+	??? = for syncing to Matrix
 */
 
 const BaseTrackSchema = z.object({
@@ -32,13 +33,13 @@ export const TrackSchema = BaseTrackSchema.extend({
 })
 export type Track = z.infer<typeof TrackSchema>
 
-export const LocalTrackSchema = TrackSchema.extend({
+export const SQLTrackSchema = TrackSchema.extend({
 	tags: z.string().optional(),
 	mentions: z.string().optional(),
 })
-export type LocalTrack = z.infer<typeof LocalTrackSchema>
+export type SQLTrack = z.infer<typeof SQLTrackSchema>
 
-export const RemoteTrackSchema = z.object({
+export const R4TrackSchema = z.object({
 	...TrackSchema.omit({
 		createdAt: true,
 		updatedAt: true,
@@ -50,11 +51,11 @@ export const RemoteTrackSchema = z.object({
 	}).shape,
 	created_at: z.string(),
 	updated_at: z.string().optional(),
-	discogs_url: z.string().url().optional(),
+	discogs_url: z.string().url().optional().nullable(),
 })
-export type RemoteTrack = z.infer<typeof RemoteTrackSchema>
+export type R4Track = z.infer<typeof R4TrackSchema>
 
-export const TrackTableSchema = `
+export const TrackTableSQLSchema = `
 	CREATE TABLE IF NOT EXISTS tracks  (
 		id TEXT PRIMARY KEY,
 		createdAt TEXT,

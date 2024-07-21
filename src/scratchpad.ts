@@ -1,15 +1,7 @@
-import {upsertLocalTrack} from './utils'
-
 // store a backup of the response, because why not
-await Bun.write(`${folder}/${slug}.json`, JSON.stringify(data, null, 2))
-console.log('saved remote backup to disk', `${folder}/${slug}.json`)
+// await Bun.write(`${folder}/${slug}.json`, JSON.stringify(data, null, 2))
+// console.log('saved remote backup to disk', `${folder}/${slug}.json`)
 
-let current = 0
-for await (const t of list) {
-	current++
-	const progress = `${current}/${list.length}`
-	console.log(progress)
-}
 // merge remote into the local tracks
 // for (const remote of data.tracks.slice(0, 3)) {
 // const local = db.query('select * from tracks where id = $id;').get({id: remote.id}) as LocalTrack

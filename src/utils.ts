@@ -1,16 +1,8 @@
-import {$, ShellError} from 'bun'
-import {Database} from 'bun:sqlite'
 import {sdk} from '@radio4000/sdk'
 import mediaUrlParser from 'media-url-parser'
-import {
-	LocalTrackSchema,
-	TrackSchema,
-	TrackTableSchema,
-	type LocalTrack,
-	type RemoteTrack,
-	type Track,
-} from './schema.ts'
+import {SQLTrackSchema, R4TrackSchema, TrackSchema, type SQLTrack, type R4Track, type Track} from './schema.ts'
 import filenamify from 'filenamify'
+import {ZodError} from 'zod'
 
 /** Fetches tracks by channel slug */
 export async function fetchRemoteTracks(slug: string, limit = 4000) {
@@ -21,28 +13,15 @@ export async function fetchRemoteTracks(slug: string, limit = 4000) {
 		.eq('slug', slug)
 		.order('created_at', {ascending: false})
 		.limit(limit)
-		.returns<RemoteTrack[]>()
+		.returns<R4Track[]>()
 	if (error) return {error: new Error(`Failed to fetch tracks`)}
 	return {data}
 }
 
-/** Parses the track's URL and adds provider + provider id */
-export function addProviderInfo(track: Track | RemoteTrack) {
-	const {provider, id: providerId} = mediaUrlParser(track.url)
-	return {
-		...track,
-		provider,
-		providerId,
-	}
-}
-
-// remote -> track
-// track -> local
-// local -> track
-
-export function remoteTrackToTrack(t: RemoteTrack) {
+export function remoteTrackToTrack(t: R4Track): Track | null {
+	const {provider, id: providerId} = mediaUrlParser(t.url)
 	try {
-		const track = TrackSchema.parse({
+		return TrackSchema.parse({
 			id: t.id,
 			createdAt: t.created_at,
 			updatedAt: t.updated_at,
@@ -53,43 +32,57 @@ export function remoteTrackToTrack(t: RemoteTrack) {
 			tags: t.tags,
 			mentions: t.mentions,
 			discogsUrl: t.discogs_url,
+			provider,
+			providerId,
 		})
-		return addProviderInfo(track)
 	} catch (err) {
-		const prop = [err.errors[0].path[0]]
-		console.log('Failed to parse remote track -> track', {
-			id: t.id,
-			invalidProp: prop[0],
-			value: t[prop[0]],
-		})
+		nicerZodError(t, err)
 		return null
 	}
 }
 
-export function trackToLocalTrack(t: Track): LocalTrack {
+export function trackToRemoteTrack(t: Track): R4Track | null {
 	try {
-		return LocalTrackSchema.parse({
+		return R4TrackSchema.parse({
+			id: t.id,
+			created_at: t.createdAt,
+			updated_at: t.updatedAt,
+			slug: t.slug,
+			url: t.url,
+			title: t.title,
+			description: t.description,
+			tags: t.tags,
+			mentions: t.mentions,
+			discogs_url: t.discogsUrl,
+		})
+	} catch (err) {
+		nicerZodError(t, err)
+		return null
+	}
+}
+
+export function trackToLocalTrack(t: Track): SQLTrack | null {
+	try {
+		return SQLTrackSchema.parse({
 			...t,
 			tags: t.tags ? t.tags.join(',') : null,
 			mentions: t.mentions ? t.mentions.join(',') : null,
 		})
 	} catch (err) {
-		const prop = [err.errors[0].path[0]]
-		console.log('Failed to parse track -> local track', t.id, prop[0], err.message)
+		nicerZodError(t, err)
 		return null
 	}
 }
 
-export function localTrackToTrack(t: LocalTrack) {
+export function localTrackToTrack(t: SQLTrack): Track | null {
 	try {
 		return TrackSchema.parse({
 			...t,
 			tags: t.tags ? t.tags.split(',') : [],
 			mentions: t.mentions ? t.mentions.split(',') : [],
 		})
-	} catch (error) {
-		const prop = [err.errors[0].path[0]]
-		console.log('Failed to parse local track -> track', t.id, prop[0], err.message)
+	} catch (err) {
+		nicerZodError(t, err)
 		return null
 	}
 }
@@ -103,8 +96,8 @@ export async function createBackup(slug: string, limit?: number) {
 		if (tracks.error) throw new Error(tracks.error.message)
 		return {
 			data: {
-				radio: radio.data as Channel,
-				tracks: tracks.data as RemoteTrack[],
+				radio: radio.data,
+				tracks: tracks.data as R4Track[],
 			},
 		}
 	} catch (err) {
@@ -112,64 +105,18 @@ export async function createBackup(slug: string, limit?: number) {
 	}
 }
 
-/** Downloads the audio from a URL (supported by yt-dlp) */
-export async function downloadAudio(url: string, filepath: string, metadataDescription: string) {
-	return $`yt-dlp -f 'bestaudio[ext=m4a]' --no-playlist --restrict-filenames --output ${filepath} --parse-metadata "${metadataDescription}:%(meta_comment)s" --embed-metadata --quiet --progress ${url}`
-}
-
-export function toFilename(track: LocalTrack | Track, filepath: string) {
+export function toFilename(track: SQLTrack | Track, filepath: string) {
 	const cleanTitle = filenamify(track.title, {replacement: ' ', maxLength: 255})
 	return `${filepath}/${cleanTitle} [${track.providerId}].m4a`
 }
 
-/** Downloads the URL of a track to disk, and updates the track in the local database. */
-export async function downloadTrack(t: LocalTrack | Track, filename: string, db: Database) {
-	try {
-		await downloadAudio(t.url, `${filename}`, t.description || '')
-		db.query(`UPDATE tracks SET files = $files, lastError = $lastError WHERE id = $id;`).run({
-			id: t.id,
-			files: `${filename}`,
-			lastError: null,
-		})
-	} catch (err: unknown) {
-		const error = err as ShellError
-		t.lastError = `Error downloading track: ${error.stderr.toString()}`
-		console.error(t.lastError)
-		db.query(`UPDATE tracks SET files = $files, lastError = $lastError WHERE id = $id;`).run({
-			id: t.id,
-			files: null,
-			lastError: t.lastError,
+function nicerZodError(t: any, err: unknown) {
+	if (err instanceof ZodError) {
+		const prop = [err.errors[0].path[0]]
+		console.log('Failed to parse remote track -> track', {
+			trackId: t.id,
+			invalidProp: prop[0],
+			value: err.errors[0].message,
 		})
 	}
-}
-
-/** Set up (or reuse) a local sqlite database */
-export async function setupDatabase(filename: string) {
-	const db = new Database(filename, {
-		strict: true,
-	})
-	db.exec('PRAGMA journal_mode = WAL;')
-	db.run(TrackTableSchema)
-	return db
-}
-
-const upsertTrackQuery = (db: Database) =>
-	db.query(
-		`INSERT OR REPLACE INTO tracks (id, slug, createdAt, updatedAt, title, url, discogsUrl, description, tags, mentions, provider, providerId, files, lastError) VALUES ($id, $slug, $createdAt, $updatedAt, $title, $url, $discogsUrl, $description, $tags, $mentions, $provider, $providerId, $files, $lastError);`,
-	)
-/** Throws if it cant upsert */
-export async function upsertLocalTrack(db: Database, t: Track) {
-	const trackToInsert = trackToLocalTrack(t)
-	const track = LocalTrackSchema.parse(trackToInsert)
-	// existing fields would be overwritten, so we keep them here.
-	const existing = db.query(`SELECT * FROM tracks WHERE id = $id;`).get({id: track.id}) as LocalTrack
-	if (existing) {
-		track.files = t.files || existing.files
-		track.lastError = t.lastError || existing.lastError
-	} else {
-		track.files = t.files || null
-		track.lastError = t.lastError || null
-	}
-	console.log('Upserted local track', track.title, track.files)
-	upsertTrackQuery(db).run(track)
 }
