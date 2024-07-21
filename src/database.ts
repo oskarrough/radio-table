@@ -1,7 +1,7 @@
 import {Database} from 'bun:sqlite'
 import {TrackTableSQLSchema, SQLTrackSchema} from './schema.ts'
 import type {Track, SQLTrack} from './schema.ts'
-import {localTrackToTrack} from './utils.ts'
+import {localTrackToTrack, trackToLocalTrack} from './utils.ts'
 
 /** Set up (or reuse) a local sqlite database */
 export async function setupDatabase(filename: string) {
@@ -30,8 +30,8 @@ const upsertTrackQuery = (db: Database) =>
 /** Throws if it cant upsert */
 export async function upsertTrack(db: Database, t: Track) {
 	// Validate the track
-	// const trackToInsert = trackToLocalTrack(t)
-	const track = SQLTrackSchema.parse(t)
+	const trackToInsert = trackToLocalTrack(t)
+	const track = SQLTrackSchema.parse(trackToInsert)
 
 	// existing fields would be overwritten, so we keep them here.
 	const existing = db.query(`SELECT * FROM tracks WHERE id = $id;`).get({id: track.id}) as SQLTrack
@@ -43,6 +43,6 @@ export async function upsertTrack(db: Database, t: Track) {
 		track.lastError = t.lastError || null
 	}
 
-	console.log('Upserted local track', track.title, track.files)
 	upsertTrackQuery(db).run(track)
+	console.log('Upserted track', track.title)
 }
