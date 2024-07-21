@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@opentf/cli-pbar": "^0.7.2",
     "@radio4000/sdk": "^0.4.11",
     "@supabase/supabase-js": "^2.44.4",
     "@tanstack/match-sorter-utils": "^8.15.1",

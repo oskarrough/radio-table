@@ -17,6 +17,7 @@ export async function downloadTrack(t: SQLTrack | Track, filename: string, db: D
 			lastError: null,
 		})
 	} catch (err: unknown) {
+		// note, the stderr is logged to the console before this..
 		const error = err as ShellError
 		t.lastError = `Error downloading track: ${error.stderr.toString()}`
 		db.query(`UPDATE tracks SET files = $files, lastError = $lastError WHERE id = $id;`).run({
