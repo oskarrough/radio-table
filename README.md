@@ -1,7 +1,7 @@
 Playing around. There are two things here:
 
-1. A CLI program to manage a radaio
-2. A React very configurable <table> component for rendering a table of tracks
+1. A CLI program to manage a Radio4000 channel
+2. A React (very configurable) <table> component for rendering a table of tracks
 
 ## The CLI
 
@@ -17,7 +17,6 @@ Options:
 	--pull      Pull tracks from Radio4000
 	--download  Download music files from tracks
 ```
-
 
 I've temporarily hardcoded downloaded files to be in .m4a format, but this doesn't work some files. Let's let yt-dlp decide the format and updates track.files accordingly.
 
