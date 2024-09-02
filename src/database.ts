@@ -16,9 +16,7 @@ export async function setupDatabase(filename: string) {
 export function getTracks(db: Database): Track[] {
 	const query = db.query(`select * from tracks`)
 	const localTracks = query.all() as SQLTrack[]
-	const tracks = localTracks
-		.map(localTrackToTrack)
-		.filter((x) => x !== null)
+	const tracks = localTracks.map(localTrackToTrack).filter((x) => x !== null)
 	return tracks
 }
 
