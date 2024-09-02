@@ -40,9 +40,12 @@ const {values} = parseArgs({
 	strict: true,
 	allowPositionals: true,
 })
-if (!values.slug) console.log('--slug <my-radio> selects your raadio channel')
-if (!values.folder) console.log('--folder <path> creates a folder for your radio here')
+if (!values.slug) console.log('--slug <my-radio> selects your radio channel')
+if (!values.folder) console.log('--folder <path> chooses the parent folder for your radio here (a new folder will be created)')
 if (!values.slug || !values.folder) process.exit(1)
+
+console.time('STOP')
+
 const slug = values.slug
 const limit = Number(values.limit)
 const folder = `${values.folder}/${values.slug}`
@@ -58,8 +61,6 @@ const pBar = new ProgressBar({
 	autoClear: true,
 	showCount: true,
 })
-
-console.time('STOP')
 
 /** If the folder doesn't exist we can't continue */
 await mkdir(tracksFolder, {recursive: true})
@@ -79,11 +80,16 @@ const {data, error} = await fetchRemoteTracks(slug, limit)
 if (error) throw Error(`remote: Failed to fetch tracks: ${error.message}`)
 const remoteTracks = data.map(remoteTrackToTrack).filter((x) => x !== null)
 
+if (!remoteTracks.length) {
+	throw Error('remote: No tracks found. Was the radio migrated to v2? Is the slug correct?')
+}
+
 console.log('START:', slug, limit, databasePath)
-console.log(tracks.length, 'tracks')
+console.log(tracks.length, 'tracks in local DB')
 console.log(tracks.filter((t) => t.lastError).length, 'errors')
 console.log(localFiles.length, 'files')
 console.log(remoteTracks.length, 'Radio4000 tracks')
+
 if (data.length - remoteTracks.length > 0) {
 	console.log(data.length - remoteTracks.length, 'R4 track(s) failed to parse')
 }
