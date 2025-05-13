@@ -1,7 +1,7 @@
 import {Database} from 'bun:sqlite'
-import {TrackTableSQLSchema, SQLTrackSchema} from './schema.ts'
-import type {Track, SQLTrack} from './schema.ts'
-import {localTrackToTrack, trackToLocalTrack} from './utils.ts'
+import {TrackTableSQLSchema, SQLTrackSchema} from '../schema.ts'
+import type {Track, SQLTrack} from '../schema.ts'
+import {localTrackToTrack, trackToLocalTrack} from '../utils.ts'
 
 /** Set up (or reuse) a local sqlite database */
 export async function setupDatabase(filename: string) {
