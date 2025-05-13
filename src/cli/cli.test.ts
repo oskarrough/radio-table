@@ -1,18 +1,17 @@
 import {expect, test} from 'bun:test'
-// import {fetchRemoteTracks, localTrackToTrack, remoteTrackToTrack, trackToLocalTrack, trackToRemoteTrack} from './utils'
+// import {remoteTrackToTrack, trackToLocalTrack, trackToRemoteTrack} from './utils'
 import {SQLTrackSchema, TrackSchema, R4TrackSchema} from '../schema'
 import {z} from 'zod'
 
-const listOfStrings = z
-	.array(z.string())
-	// .catch((ctx) => {
-	// 	console.log(ctx)
-	// 	return Math.random()
-	// })
-	// .transform((val) => {
-	// 	// return ['hey2']
-	// 	return 43
-	// })
+const listOfStrings = z.array(z.string())
+// .catch((ctx) => {
+// 	console.log(ctx)
+// 	return Math.random()
+// })
+// .transform((val) => {
+// 	// return ['hey2']
+// 	return 43
+// })
 
 test('2 + 2', () => {
 	// expect(2 + 2).toBe(4)
