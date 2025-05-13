@@ -1,6 +1,6 @@
 import {expect, test} from 'bun:test'
-import {fetchRemoteTracks, localTrackToTrack, remoteTrackToTrack, trackToLocalTrack, trackToRemoteTrack} from './utils'
-import {SQLTrackSchema, TrackSchema, R4TrackSchema} from './schema'
+// import {fetchRemoteTracks, localTrackToTrack, remoteTrackToTrack, trackToLocalTrack, trackToRemoteTrack} from './utils'
+import {SQLTrackSchema, TrackSchema, R4TrackSchema} from '../schema'
 import {z} from 'zod'
 
 const listOfStrings = z

@@ -106,7 +106,20 @@ export async function createBackup(slug: string, limit?: number) {
 }
 
 export function toFilename(track: SQLTrack | Track, filepath: string) {
+	// Ensure title exists and is a string
+	if (!track.title || typeof track.title !== 'string') {
+		throw new Error(`Invalid track title: ${JSON.stringify(track.title)}`)
+	}
+
+	// Ensure providerId exists
+	if (!track.providerId) {
+		throw new Error(`Missing providerId for track: ${track.title}`)
+	}
+
+	// Clean the title and create a safe filename
 	const cleanTitle = filenamify(track.title, {replacement: ' ', maxLength: 255})
+
+	// Return the full path with filename
 	return `${filepath}/${cleanTitle} [${track.providerId}].m4a`
 }
 

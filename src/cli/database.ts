@@ -3,12 +3,17 @@ import {TrackTableSQLSchema, SQLTrackSchema} from '../schema.ts'
 import type {Track, SQLTrack} from '../schema.ts'
 import {localTrackToTrack, trackToLocalTrack} from '../utils.ts'
 
-/** Set up (or reuse) a local sqlite database */
+/**
+ * Set up (or reuse) a local sqlite database
+ * Use filename=':memory:' for a temporary in-memory database (useful for simulations)
+ */
 export async function setupDatabase(filename: string) {
 	const db = new Database(filename, {
 		strict: true,
 	})
-	db.exec('PRAGMA journal_mode = WAL;')
+	if (filename !== ':memory:') {
+		db.exec('PRAGMA journal_mode = WAL;')
+	}
 	db.run(TrackTableSQLSchema)
 	return db
 }
@@ -25,8 +30,12 @@ const upsertTrackQuery = (db: Database) =>
 		`INSERT OR REPLACE INTO tracks (id, slug, createdAt, updatedAt, title, url, discogsUrl, description, tags, mentions, provider, providerId, files, lastError) VALUES ($id, $slug, $createdAt, $updatedAt, $title, $url, $discogsUrl, $description, $tags, $mentions, $provider, $providerId, $files, $lastError);`,
 	)
 
-/** Throws if it cant upsert */
-export async function upsertTrack(db: Database, t: Track) {
+/**
+ * Upserts a track to the database.
+ * Throws if it cant upsert.
+ * Pass simulate=true to log actions without making changes.
+ */
+export async function upsertTrack(db: Database, t: Track, simulate = false) {
 	// Validate the track
 	const trackToInsert = trackToLocalTrack(t)
 	const track = SQLTrackSchema.parse(trackToInsert)
@@ -41,6 +50,10 @@ export async function upsertTrack(db: Database, t: Track) {
 		track.lastError = t.lastError || null
 	}
 
-	upsertTrackQuery(db).run(track)
-	console.log('Upserted track', track.title)
+	if (simulate) {
+		console.log(`Simulation: would upsert track "${track.title}" (${track.id})`)
+	} else {
+		upsertTrackQuery(db).run(track)
+		console.log('Upserted track', track.title)
+	}
 }

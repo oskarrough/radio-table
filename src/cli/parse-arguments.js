@@ -1,25 +1,24 @@
 import {parseArgs} from 'util'
 
 /** Get CLI arguments (only strings + booleans) */
-export default function parseArguments() {
+export function parseArguments() {
 	const {values} = parseArgs({
 		// eslint-disable-next-line no-undef
 		args: Bun.argv,
 		options: {
+			help: {
+				type: 'boolean',
+			},
 			simulate: {
 				type: 'boolean',
 			},
 			slug: {
 				type: 'string',
 			},
-			limit: {
-				type: 'string',
-				default: '4000',
-			},
 			folder: {
 				type: 'string',
 			},
-			downloadFailed: {
+			includeFailed: {
 				type: 'boolean',
 			},
 			pull: {
@@ -27,6 +26,12 @@ export default function parseArguments() {
 			},
 			download: {
 				type: 'boolean',
+			},
+			premium: {
+				type: 'boolean',
+			},
+			poToken: {
+				type: 'string',
 			},
 		},
 		strict: true,
