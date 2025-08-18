@@ -2,7 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import TheTable from './the-table.tsx'
 import {createBackup} from './utils.ts'
-import {hello} from './sqlite-browser.ts'
+// import {hello} from './sqlite-browser.ts'
 import './index.css'
 
 async function main() {
